@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.4.22 <0.7.0;
+pragma solidity >=0.4.22 <0.8.0;
 
 pragma experimental ABIEncoderV2;
 
@@ -9,6 +9,7 @@ contract LotteryContract is VRFConsumerBase {
     
     bytes32 reqId;
     uint256 public randomNumber;
+    uint256 public bettingPrice = 100;
     
     bytes32 internal keyHash;
     uint256 internal fee;
@@ -30,12 +31,12 @@ contract LotteryContract is VRFConsumerBase {
     struct Bet {
         uint id;
         address payable player;
-        uint betAmount;
+        uint bettingAmount;
         uint gameId;
-        BetNumbers betNumbers;
+        BettingNumbers bettingNumbers;
     }
     
-    struct BetNumbers {
+    struct BettingNumbers {
         uint8 n1;
         uint8 n2;
         uint8 n3;
@@ -70,30 +71,35 @@ contract LotteryContract is VRFConsumerBase {
     }
     
     modifier activeGameRequired() {
-        require(activeGame == true, 'There are no active games accepting bets');
-        require(games[currentGameId].id == currentGameId, 'cannot find game');
+        require(activeGame == true, "There are no active games accepting bets");
+        require(games[currentGameId].id == currentGameId, "cannot find game");
         _;
     }
     
     modifier adminRequired() {
-        require(msg.sender == admin, 'Only admin has access to this resource');
+        require(msg.sender == admin, "Only admin has access to this resource");
         _;
   }
   
     modifier validBettingNumbersRequired(uint8 n1, uint8 n2, uint8 n3, uint8 n4) {
-        require(n1 <= 9, 'First digit must be less than 10');
-        require(n2 <= 9, 'Second digit must be less than 10');
-        require(n3 <= 9, 'Third digit must be less than 10');
-        require(n4 <= 9, 'Fourth digit must be less than 10');
+        require(n1 <= 9, "First digit must be less than 10");
+        require(n2 <= 9, "Second digit must be less than 10");
+        require(n3 <= 9, "Third digit must be less than 10");
+        require(n4 <= 9, "Fourth digit must be less than 10");
+        _;
+    }
+
+    modifier validBettingPrice() {
+        require(msg.value == bettingPrice, "Invalid betting price");
         _;
     }
     
     function startGame() public adminRequired {
         // ensure there are no active games
-        require(activeGame == false, 'There is an active game already');
+        require(activeGame == false, "There is an active game already");
         
         // ensure there are no outstanding bets
-        require(bets.length == 0, 'There are outstanding bets');
+        require(bets.length == 0, "There are outstanding bets");
         
         // activate game
         activeGame = true;
@@ -113,17 +119,15 @@ contract LotteryContract is VRFConsumerBase {
         activeGame = false;
     }
     
-    function placeBet(uint8 n1, uint8 n2, uint8 n3, uint8 n4) payable public activeGameRequired validBettingNumbersRequired(n1, n2, n3, n4) {
-        // check and setup bet amount rules
-        require(msg.value == 100, 'Bet cost must be 100 wei');
-        
+    function placeBet(uint8 n1, uint8 n2, uint8 n3, uint8 n4) payable public activeGameRequired validBettingPrice validBettingNumbersRequired(n1, n2, n3, n4) {
+
         totalBets++;
         
         games[currentGameId].totalBetAmount += msg.value;
         
-        BetNumbers memory betNumbers = BetNumbers(n1, n2, n3, n4);
+        BettingNumbers memory bettingNumbers = BettingNumbers(n1, n2, n3, n4);
         
-        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, betNumbers);
+        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, bettingNumbers);
         
         bets.push(bet);
     }

@@ -1,17 +1,35 @@
 const { assert } = require("chai");
 const truffleAssert = require("truffle-assertions");
 const LotteryContract = artifacts.require("LotteryContract.sol");
+const RandomnessContract = artifacts.require("MockRandomnessContract.sol");
+const LinkTokenInterface = artifacts.require("LinkTokenInterface");
+const { LinkToken } = require("@chainlink/contracts/truffle/v0.4/LinkToken");
 
 contract("LotteryContract", (accounts) => {
   let lotteryContract;
+  let randomnessContract;
+
+  const getRandomAccount = () => {
+    return accounts[Math.floor(Math.random() * 10)];
+  };
+
+  before(async () => {
+    randomnessContract = await RandomnessContract.deployed();
+    lotteryContract = await LotteryContract.deployed();
+
+    const token = await LinkTokenInterface.at(LinkToken.address);
+    await token.transfer(randomnessContract.address, "1000000000000000000");
+  });
 
   beforeEach(async () => {
-    lotteryContract = await LotteryContract.deployed();
+    //randomnessContract = await RandomnessContract.deployed();
+    //lotteryContract = await LotteryContract.deployed();
   });
 
   afterEach(async () => {
     const activeGame = await lotteryContract.activeGame();
     if (activeGame) {
+      await lotteryContract.drawNumbers(123456789);
       await lotteryContract.endGame();
     }
   });
@@ -71,19 +89,17 @@ contract("LotteryContract", (accounts) => {
     });
 
     it("adds new Game to games mapping", async () => {
+      // Arrange
       const currentGameId = parseInt(await lotteryContract.currentGameId(), 10);
-
-      const game = await lotteryContract.games.call(currentGameId);
-
+      const game = await lotteryContract.games(currentGameId);
       assert.equal(game.id, currentGameId);
-      assert.equal(game.randomNumber, 0);
-      assert.equal(game.totalBetAmount, 0);
 
+      // Act
       await lotteryContract.startGame();
 
+      // Assert
       const updatedCurrentGameId = parseInt(await lotteryContract.currentGameId(), 10);
-
-      const newGame = await lotteryContract.games.call(updatedCurrentGameId);
+      const newGame = await lotteryContract.games(updatedCurrentGameId);
 
       assert.equal(newGame.id, updatedCurrentGameId);
       assert.equal(newGame.randomNumber, 0);
@@ -117,44 +133,44 @@ contract("LotteryContract", (accounts) => {
       await lotteryContract.endGame();
 
       await await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[1], value: bettingPrice }),
+        lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice }),
         "There are no active games accepting bets"
       );
     });
 
     it("requires valid betting numbers", async () => {
       await truffleAssert.reverts(
-        lotteryContract.placeBet(10, n2, n3, n4, { from: accounts[1], value: bettingPrice }),
+        lotteryContract.placeBet(10, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice }),
         "First digit must be less than 10"
       );
       await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, 12, n3, n4, { from: accounts[1], value: bettingPrice }),
+        lotteryContract.placeBet(n1, 12, n3, n4, { from: getRandomAccount(), value: bettingPrice }),
         "Second digit must be less than 10"
       );
       await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, n2, 13, n4, { from: accounts[1], value: bettingPrice }),
+        lotteryContract.placeBet(n1, n2, 13, n4, { from: getRandomAccount(), value: bettingPrice }),
         "Third digit must be less than 10"
       );
       await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, n2, n3, 14, { from: accounts[1], value: bettingPrice }),
+        lotteryContract.placeBet(n1, n2, n3, 14, { from: getRandomAccount(), value: bettingPrice }),
         "Fourth digit must be less than 10"
       );
 
-      await lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[1], value: bettingPrice });
+      await lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice });
     });
 
     it("requires valid betting payment", async () => {
       await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[2], value: 99 }),
+        lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: 99 }),
         "Invalid betting price"
       );
 
       await truffleAssert.reverts(
-        lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[2], value: 101 }),
+        lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: 101 }),
         "Invalid betting price"
       );
 
-      await lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[2], value: bettingPrice });
+      await lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice });
     });
 
     it("adds betting payment to total bet amount for the game", async () => {
@@ -180,12 +196,13 @@ contract("LotteryContract", (accounts) => {
     });
 
     it("saves the bet correctly", async () => {
+      const randomAccount = getRandomAccount();
       const currentGameId = parseInt(await lotteryContract.currentGameId(), 10);
-      await lotteryContract.placeBet(n1, n2, n3, n4, { from: accounts[4], value: bettingPrice });
+      await lotteryContract.placeBet(n1, n2, n3, n4, { from: randomAccount, value: bettingPrice });
 
       const bet = await lotteryContract.bets(0);
 
-      assert.equal(bet.player, accounts[4]);
+      assert.equal(bet.player, randomAccount);
       assert.equal(parseInt(bet.bettingAmount, 10), parseInt(bettingPrice, 10));
       assert.equal(parseInt(bet.gameId, 10), currentGameId);
       assert.equal(bet.bettingNumbers.length, 4);

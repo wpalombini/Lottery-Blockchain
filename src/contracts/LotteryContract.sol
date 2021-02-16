@@ -5,25 +5,27 @@ pragma experimental ABIEncoderV2;
 
 import "@chainlink/contracts/contracts/v0.6/VRFConsumerBase.sol";
 
-contract LotteryContract is VRFConsumerBase {
+import { IRandomnessContract } from "./interfaces/IRandomnessContract.sol";
+import { IGovernanceContract } from "./interfaces/IGovernanceContract.sol";
+
+contract LotteryContract {
+    IGovernanceContract public governance;
     
-    bytes32 reqId;
-    uint256 public randomNumber;
     uint256 public bettingPrice = 100;
-    
-    bytes32 internal keyHash;
-    uint256 internal fee;
     
     address payable admin;
     
     bool public activeGame;
     uint public currentGameId = 1;
     uint totalBets = 0;
+
+    bool outstandingBets = false;
     
     struct Game {
         uint id;
         uint randomNumber;
         uint totalBetAmount;
+        BettingNumbers drawnNumbers;
     }
     
     mapping (uint => Game) public games;
@@ -45,12 +47,6 @@ contract LotteryContract is VRFConsumerBase {
     
     Bet[] public bets;
     
-    struct DrawDetails {
-        string message;
-        uint drawnDateTime;
-        uint randomNumber;
-    }
-    
     /**
      * Constructor inherits VRFConsumerBase
      * 
@@ -59,15 +55,9 @@ contract LotteryContract is VRFConsumerBase {
      * LINK token address:                0xa36085F69e2889c224210F603D836748e7dC0088
      * Key Hash: 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4
      */
-    constructor()
-        VRFConsumerBase(
-            0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9, // VRF Coordinator
-            0xa36085F69e2889c224210F603D836748e7dC0088  // LINK Token
-        ) public
-    {
-        keyHash = 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4;
-        fee = 0.1 * 10 ** 18; // 0.1 LINK
+    constructor(address _governance) public {
         admin = msg.sender;
+        governance = IGovernanceContract(_governance);
     }
     
     modifier activeGameRequired() {
@@ -93,6 +83,11 @@ contract LotteryContract is VRFConsumerBase {
         require(msg.value == bettingPrice, "Invalid betting price");
         _;
     }
+
+    modifier noOutstandingBetsRequired() {
+        require(!outstandingBets, "There are outstanding bets");
+        _;
+    }
     
     function startGame() public adminRequired {
         // ensure there are no active games
@@ -107,11 +102,11 @@ contract LotteryContract is VRFConsumerBase {
         // currentGameId + 1
         currentGameId++;
         
-        // add new game to gams mapping
-        games[currentGameId] = Game(currentGameId, 0, 0);
+        // add new game to games mapping
+        games[currentGameId] = Game(currentGameId, 0, 0, BettingNumbers(0, 0, 0, 0));
     }
     
-    function endGame() public adminRequired activeGameRequired {
+    function endGame() public adminRequired activeGameRequired noOutstandingBetsRequired {
         // reset bets array
         delete bets;
         
@@ -120,6 +115,9 @@ contract LotteryContract is VRFConsumerBase {
     }
     
     function placeBet(uint8 n1, uint8 n2, uint8 n3, uint8 n4) payable public activeGameRequired validBettingPrice validBettingNumbersRequired(n1, n2, n3, n4) {
+        if (!outstandingBets) {
+            outstandingBets = true;
+        }
 
         totalBets++;
         
@@ -132,24 +130,38 @@ contract LotteryContract is VRFConsumerBase {
         bets.push(bet);
     }
     
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
-        reqId = requestId;
-        randomNumber = randomness;
-        
-        // handle random number
+    function drawNumbers(uint256 seed) public adminRequired returns (bytes32 requestId) {
+        return getRandomNumber(seed);
     }
-    
-    function getDrawnNumbers(uint256 rndNumber) public pure returns (uint8, uint8, uint8, uint8) {
-        return (
-            uint8(rndNumber % 10000 / 1000),
-            uint8(rndNumber % 1000 / 100),
-            uint8(rndNumber % 100 / 10),
-            uint8(rndNumber % 10)
-            );
-    }
-    
+
     function getRandomNumber(uint256 userProvidedSeed) public returns (bytes32 requestId) {
-        require(LINK.balanceOf(address(this)) > fee, "Not enough LINK - fill contract with faucet");
-        return requestRandomness(keyHash, fee, userProvidedSeed);
+        return IRandomnessContract(governance.randomness()).randomNumber(userProvidedSeed);
+    }
+
+    function fulfill_random(uint256 _randomness) external {
+        games[currentGameId].randomNumber = _randomness;
+
+        processDrawnNumbers();
+    }
+    
+    function processDrawnNumbers() private {
+        uint256 randomNumber = games[currentGameId].randomNumber;
+
+        uint8 n1 = uint8(randomNumber % 10000 / 1000);
+        uint8 n2 = uint8(randomNumber % 1000 / 100);
+        uint8 n3 = uint8(randomNumber % 100 / 10);
+        uint8 n4 = uint8(randomNumber % 10);
+
+        games[currentGameId].drawnNumbers = BettingNumbers(n1, n2, n3, n4);
+
+        payoutPrizes();
+    }
+
+    function payoutPrizes() private {
+        // find winners
+
+        // payout prizes
+
+        outstandingBets = false;
     }
 }

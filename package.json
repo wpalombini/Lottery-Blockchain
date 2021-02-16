@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "@chainlink/contracts": "0.1.2",
+    "@truffle/contract": "4.3.6",
     "@truffle/hdwallet-provider": "1.2.1",
     "babel-polyfill": "6.26.0",
     "babel-register": "6.26.0",

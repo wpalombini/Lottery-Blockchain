@@ -9,21 +9,37 @@ contract("LotteryContract", (accounts) => {
   let lotteryContract;
   let randomnessContract;
 
-  const getRandomAccount = () => {
-    return accounts[Math.floor(Math.random() * 10)];
+  let bettingPrice = 0;
+
+  let n1 = 0;
+  let n2 = 0;
+  let n3 = 0;
+  let n4 = 0;
+
+  const getRandomNumber = () => {
+    return Math.floor(Math.random() * 10);
   };
 
+  const getRandomAccount = () => {
+    return accounts[getRandomNumber()];
+  };
+
+  // before is Mocha's version of beforeAll
   before(async () => {
     randomnessContract = await RandomnessContract.deployed();
     lotteryContract = await LotteryContract.deployed();
 
     const token = await LinkTokenInterface.at(LinkToken.address);
     await token.transfer(randomnessContract.address, "1000000000000000000");
+
+    bettingPrice = await lotteryContract.bettingPrice();
   });
 
   beforeEach(async () => {
-    //randomnessContract = await RandomnessContract.deployed();
-    //lotteryContract = await LotteryContract.deployed();
+    n1 = getRandomNumber();
+    n2 = getRandomNumber();
+    n3 = getRandomNumber();
+    n4 = getRandomNumber();
   });
 
   afterEach(async () => {
@@ -108,24 +124,7 @@ contract("LotteryContract", (accounts) => {
   });
 
   describe("placeBet", async () => {
-    let bettingPrice = 0;
-
-    let n1 = 0;
-    let n2 = 0;
-    let n3 = 0;
-    let n4 = 0;
-
-    // before is Mocha's version of beforeAll
-    before(async () => {
-      bettingPrice = await lotteryContract.bettingPrice();
-    });
-
     beforeEach(async () => {
-      n1 = Math.floor(Math.random() * 10);
-      n2 = Math.floor(Math.random() * 10);
-      n3 = Math.floor(Math.random() * 10);
-      n4 = Math.floor(Math.random() * 10);
-
       await lotteryContract.startGame();
     });
 
@@ -213,5 +212,32 @@ contract("LotteryContract", (accounts) => {
     });
   });
 
-  describe("endGame", async () => {});
+  describe("drawNumbers", async () => {});
+
+  describe("payoutPrizes", async () => {});
+
+  describe("endGame", async () => {
+    it("requires that only the admin can end a game", async () => {
+      await lotteryContract.startGame();
+
+      await truffleAssert.reverts(
+        lotteryContract.endGame.call({ from: accounts[1] }),
+        "Only admin has access to this resource"
+      );
+    });
+
+    it("requires that there is an active game", async () => {
+      await truffleAssert.reverts(
+        lotteryContract.endGame.call({ from: accounts[0] }),
+        "There are no active games accepting bets"
+      );
+    });
+
+    it("requires that there are no outstanding bets", async () => {
+      await lotteryContract.startGame();
+      await lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice });
+
+      await truffleAssert.reverts(lotteryContract.endGame.call({ from: accounts[0] }), "There are outstanding bets");
+    });
+  });
 });

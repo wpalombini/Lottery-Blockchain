@@ -57,7 +57,7 @@ contract MockRandomnessContract is VRFConsumerBase {
         generatedNumber = _randomness;
 
         // call lottery method and pass the random number
-        ILotteryContract(governance.lottery()).fulfill_random(_randomness);
+        ILotteryContract(governance.lottery()).fulfillRandomNumber(_randomness);
     }
     
     function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
@@ -67,7 +67,7 @@ contract MockRandomnessContract is VRFConsumerBase {
         //generatedNumber = randomness;
 
         // call lottery method and pass the random number
-        //ILotteryContract(governance.lottery()).fulfill_random(generatedNumber);
+        //ILotteryContract(governance.lottery()).fulfillRandomNumber(generatedNumber);
     }
     
     function getLINKBalance() public view returns (uint) {

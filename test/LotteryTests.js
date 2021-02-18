@@ -212,7 +212,33 @@ contract("LotteryContract", (accounts) => {
     });
   });
 
-  describe("drawNumbers", async () => {});
+  describe("drawNumbers", async () => {
+    it("requires that only the admin can draw the numbers", async () => {
+      await truffleAssert.reverts(
+        lotteryContract.drawNumbers(123456789, { from: accounts[1] }),
+        "Only admin has access to this resource"
+      );
+    });
+
+    it("Four numbers should be drawn correctly", async () => {
+      const randomNumber = 123456789;
+      await lotteryContract.startGame();
+
+      // drawNumbers method actually takes a seed that is used to build the random number,
+      // but for simplicity of this test (mocks, etc), we will use it as the drawn number
+      await lotteryContract.drawNumbers(randomNumber);
+
+      const currentGameId = parseInt(await lotteryContract.currentGameId(), 10);
+
+      const game = await lotteryContract.games(currentGameId);
+
+      assert.equal(parseInt(game.randomNumber, 10), randomNumber);
+      assert.equal(parseInt(game.drawnNumbers.n1, 10), 6);
+      assert.equal(parseInt(game.drawnNumbers.n2, 10), 7);
+      assert.equal(parseInt(game.drawnNumbers.n3, 10), 8);
+      assert.equal(parseInt(game.drawnNumbers.n4, 10), 9);
+    });
+  });
 
   describe("payoutPrizes", async () => {});
 

@@ -138,7 +138,7 @@ contract LotteryContract {
         return IRandomnessContract(governance.randomness()).randomNumber(userProvidedSeed);
     }
 
-    function fulfill_random(uint256 _randomness) external {
+    function fulfillRandomNumber(uint256 _randomness) external {
         games[currentGameId].randomNumber = _randomness;
 
         processDrawnNumbers();

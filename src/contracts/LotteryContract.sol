@@ -10,16 +10,23 @@ import { IGovernanceContract } from "./interfaces/IGovernanceContract.sol";
 
 contract LotteryContract {
     IGovernanceContract public governance;
+
+    enum GameStateEnum {
+        OPEN,
+        CLOSED,
+        PROCESSING_WINNERS,
+        PAYING_WINNERS,
+        PAYING_WINNERS_COMPLETED
+    }
+
+    GameStateEnum public gameState = GameStateEnum.CLOSED;
     
     uint256 public bettingPrice = 100;
     
     address payable admin;
     
-    bool public activeGame;
     uint public currentGameId = 1;
     uint totalBets = 0;
-
-    bool outstandingBets = false;
     
     struct Game {
         uint id;
@@ -61,7 +68,7 @@ contract LotteryContract {
     }
     
     modifier activeGameRequired() {
-        require(activeGame == true, "There are no active games accepting bets");
+        require(gameState == GameStateEnum.OPEN, "There are no active games accepting bets");
         require(games[currentGameId].id == currentGameId, "cannot find game");
         _;
     }
@@ -83,21 +90,16 @@ contract LotteryContract {
         require(msg.value == bettingPrice, "Invalid betting price");
         _;
     }
-
-    modifier noOutstandingBetsRequired() {
-        require(!outstandingBets, "There are outstanding bets");
-        _;
-    }
     
     function startGame() public adminRequired {
         // ensure there are no active games
-        require(activeGame == false, "There is an active game already");
+        require(gameState == GameStateEnum.CLOSED, "There is an active game already");
         
         // ensure there are no outstanding bets
         require(bets.length == 0, "There are outstanding bets");
         
         // activate game
-        activeGame = true;
+        gameState = GameStateEnum.OPEN;
         
         // currentGameId + 1
         currentGameId++;
@@ -106,19 +108,16 @@ contract LotteryContract {
         games[currentGameId] = Game(currentGameId, 0, 0, BettingNumbers(0, 0, 0, 0));
     }
     
-    function endGame() public adminRequired activeGameRequired noOutstandingBetsRequired {
+    function endGame() private {
+        
         // reset bets array
         delete bets;
         
         // deactivate game
-        activeGame = false;
+        gameState = GameStateEnum.CLOSED;
     }
     
     function placeBet(uint8 n1, uint8 n2, uint8 n3, uint8 n4) payable public activeGameRequired validBettingPrice validBettingNumbersRequired(n1, n2, n3, n4) {
-        if (!outstandingBets) {
-            outstandingBets = true;
-        }
-
         totalBets++;
         
         games[currentGameId].totalBetAmount += msg.value;
@@ -130,21 +129,27 @@ contract LotteryContract {
         bets.push(bet);
     }
     
-    function drawNumbers(uint256 seed) public adminRequired returns (bytes32 requestId) {
+    function drawNumbers(uint256 seed) public adminRequired activeGameRequired returns (bytes32 requestId) {
+        gameState = GameStateEnum.PROCESSING_WINNERS;
         return getRandomNumber(seed);
     }
 
-    function getRandomNumber(uint256 userProvidedSeed) public returns (bytes32 requestId) {
+    function getRandomNumber(uint256 userProvidedSeed) private returns (bytes32 requestId) {
+        require(gameState == GameStateEnum.PROCESSING_WINNERS, "Invalid game state to fetch random number");
+
         return IRandomnessContract(governance.randomness()).randomNumber(userProvidedSeed);
     }
 
     function fulfillRandomNumber(uint256 _randomness) external {
+        require(gameState == GameStateEnum.PROCESSING_WINNERS, "Invalid game state to process random number");
         games[currentGameId].randomNumber = _randomness;
 
         processDrawnNumbers();
     }
     
     function processDrawnNumbers() private {
+        require(gameState == GameStateEnum.PROCESSING_WINNERS, "Invalid game state to process drawn numbers");
+
         uint256 randomNumber = games[currentGameId].randomNumber;
 
         uint8 n1 = uint8(randomNumber % 10000 / 1000);
@@ -154,14 +159,19 @@ contract LotteryContract {
 
         games[currentGameId].drawnNumbers = BettingNumbers(n1, n2, n3, n4);
 
+        gameState = GameStateEnum.PAYING_WINNERS;
         payoutPrizes();
     }
 
     function payoutPrizes() private {
+        require(gameState == GameStateEnum.PAYING_WINNERS, "Invalid game state to payout prizes");
+
         // find winners
 
         // payout prizes
 
-        outstandingBets = false;
+        gameState = GameStateEnum.PAYING_WINNERS_COMPLETED;
+
+        endGame();
     }
 }

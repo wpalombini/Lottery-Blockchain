@@ -16,6 +16,9 @@ contract("LotteryContract", (accounts) => {
   let n3 = 0;
   let n4 = 0;
 
+  const OPEN = 0;
+  const CLOSED = 1;
+
   const getRandomNumber = () => {
     return Math.floor(Math.random() * 10);
   };
@@ -43,10 +46,9 @@ contract("LotteryContract", (accounts) => {
   });
 
   afterEach(async () => {
-    const activeGame = await lotteryContract.activeGame();
-    if (activeGame) {
+    const gameState = parseInt(await lotteryContract.gameState(), 10);
+    if (gameState == OPEN) {
       await lotteryContract.drawNumbers(123456789);
-      await lotteryContract.endGame();
     }
   });
 
@@ -70,8 +72,8 @@ contract("LotteryContract", (accounts) => {
     it("requires that no games are currently running", async () => {
       // Arrange
       await lotteryContract.startGame();
-      const activeGame = await lotteryContract.activeGame();
-      assert.equal(activeGame, true);
+      const gameState = parseInt(await lotteryContract.gameState(), 10);
+      assert.equal(gameState, OPEN);
 
       // Act and Assert
       await truffleAssert.reverts(lotteryContract.startGame(), "There is an active game already");
@@ -85,13 +87,13 @@ contract("LotteryContract", (accounts) => {
     });
 
     it("sets activeGame to true", async () => {
-      const activeGame = await lotteryContract.activeGame();
-      assert.equal(activeGame, false);
+      const gameState = parseInt(await lotteryContract.gameState(), 10);
+      assert.equal(gameState, CLOSED);
 
       await lotteryContract.startGame();
 
-      const updatedActiveGame = await lotteryContract.activeGame();
-      assert.equal(updatedActiveGame, true);
+      const updatedGameState = parseInt(await lotteryContract.gameState(), 10);
+      assert.equal(updatedGameState, OPEN);
     });
 
     it("sets currentGameId + 1", async () => {
@@ -129,7 +131,7 @@ contract("LotteryContract", (accounts) => {
     });
 
     it("requires that there is an active game", async () => {
-      await lotteryContract.endGame();
+      await lotteryContract.drawNumbers(123456789);
 
       await await truffleAssert.reverts(
         lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice }),
@@ -220,6 +222,10 @@ contract("LotteryContract", (accounts) => {
       );
     });
 
+    it("requires that there is an active game", async () => {
+      await truffleAssert.reverts(lotteryContract.drawNumbers(123456789), "There are no active games accepting bets");
+    });
+
     it("Four numbers should be drawn correctly", async () => {
       const randomNumber = 123456789;
       await lotteryContract.startGame();
@@ -243,27 +249,13 @@ contract("LotteryContract", (accounts) => {
   describe("payoutPrizes", async () => {});
 
   describe("endGame", async () => {
-    it("requires that only the admin can end a game", async () => {
+    it("game should get closed correctly", async () => {
       await lotteryContract.startGame();
+      await lotteryContract.drawNumbers(123456789);
 
-      await truffleAssert.reverts(
-        lotteryContract.endGame.call({ from: accounts[1] }),
-        "Only admin has access to this resource"
-      );
-    });
+      const gameState = parseInt(await lotteryContract.gameState(), 10);
 
-    it("requires that there is an active game", async () => {
-      await truffleAssert.reverts(
-        lotteryContract.endGame.call({ from: accounts[0] }),
-        "There are no active games accepting bets"
-      );
-    });
-
-    it("requires that there are no outstanding bets", async () => {
-      await lotteryContract.startGame();
-      await lotteryContract.placeBet(n1, n2, n3, n4, { from: getRandomAccount(), value: bettingPrice });
-
-      await truffleAssert.reverts(lotteryContract.endGame.call({ from: accounts[0] }), "There are outstanding bets");
+      assert.equal(gameState, CLOSED);
     });
   });
 });

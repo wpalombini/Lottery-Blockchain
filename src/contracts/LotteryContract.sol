@@ -27,6 +27,7 @@ contract LotteryContract {
     
     uint public currentGameId = 1;
     uint totalBets = 0;
+    address payable[] winners;
     
     struct Game {
         uint id;
@@ -43,6 +44,7 @@ contract LotteryContract {
         uint bettingAmount;
         uint gameId;
         BettingNumbers bettingNumbers;
+        bool winner;
     }
     
     struct BettingNumbers {
@@ -76,7 +78,7 @@ contract LotteryContract {
     modifier adminRequired() {
         require(msg.sender == admin, "Only admin has access to this resource");
         _;
-  }
+    }
   
     modifier validBettingNumbersRequired(uint8 n1, uint8 n2, uint8 n3, uint8 n4) {
         require(n1 <= 9, "First digit must be less than 10");
@@ -112,6 +114,9 @@ contract LotteryContract {
         
         // reset bets array
         delete bets;
+
+        // reset winners array
+        winners = new address payable[](0);
         
         // deactivate game
         gameState = GameStateEnum.CLOSED;
@@ -124,7 +129,7 @@ contract LotteryContract {
         
         BettingNumbers memory bettingNumbers = BettingNumbers(n1, n2, n3, n4);
         
-        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, bettingNumbers);
+        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, bettingNumbers, false);
         
         bets.push(bet);
     }
@@ -166,12 +171,45 @@ contract LotteryContract {
     function payoutPrizes() private {
         require(gameState == GameStateEnum.PAYING_WINNERS, "Invalid game state to payout prizes");
 
-        // find winners
+        findWinners();
 
-        // payout prizes
+        payoutWinners();
 
         gameState = GameStateEnum.PAYING_WINNERS_COMPLETED;
 
         endGame();
+    }
+
+    function findWinners() private {
+        for (uint i; i < bets.length; i++) {
+            bets[i].winner = bets[i].bettingNumbers.n1 == games[currentGameId].drawnNumbers.n1
+                && bets[i].bettingNumbers.n2 == games[currentGameId].drawnNumbers.n2
+                && bets[i].bettingNumbers.n3 == games[currentGameId].drawnNumbers.n3
+                && bets[i].bettingNumbers.n4 == games[currentGameId].drawnNumbers.n4;
+        }
+    }
+
+    function payoutWinners() private {
+        for (uint i; i < bets.length; i++) {
+            if (bets[i].winner == true) {
+                winners.push(bets[i].player);
+            }
+        }
+
+        uint comission = 0;
+        
+        // If there are winners...
+        if (winners.length > 0) { 
+            // ...take comission when the below division is not exact
+            comission = games[currentGameId].totalBetAmount % winners.length * bettingPrice;
+
+            uint payablePrize = games[currentGameId].totalBetAmount - comission;
+
+            uint individualPayablePrize = payablePrize / winners.length;
+
+            for (uint i; i < winners.length; i++) {
+                winners[i].transfer(individualPayablePrize);
+            }
+        }
     }
 }

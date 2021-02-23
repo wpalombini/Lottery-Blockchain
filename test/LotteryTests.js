@@ -6,6 +6,8 @@ const LinkTokenInterface = artifacts.require("LinkTokenInterface");
 const { LinkToken } = require("@chainlink/contracts/truffle/v0.4/LinkToken");
 
 contract("LotteryContract", (accounts) => {
+  const BN = web3.utils.BN;
+  const toBN = web3.utils.toBN;
   let lotteryContract;
   let randomnessContract;
 
@@ -35,7 +37,7 @@ contract("LotteryContract", (accounts) => {
     const token = await LinkTokenInterface.at(LinkToken.address);
     await token.transfer(randomnessContract.address, "1000000000000000000");
 
-    bettingPrice = await lotteryContract.bettingPrice();
+    bettingPrice = parseInt(await lotteryContract.bettingPrice());
   });
 
   beforeEach(async () => {
@@ -246,7 +248,172 @@ contract("LotteryContract", (accounts) => {
     });
   });
 
-  describe("payoutPrizes", async () => {});
+  describe("payoutPrizes", async () => {
+    beforeEach(async () => {
+      await lotteryContract.startGame();
+    });
+
+    it("should pay prizes correctly: 10 players, 7 winners", async () => {
+      // Arrange
+      const totalPlayers = 10;
+      const totalWinners = 7;
+
+      const totalBetAmount = totalPlayers * bettingPrice;
+      const profit = (totalBetAmount * 10) / 100; // 10%
+      const payablePrize = totalBetAmount - profit;
+      const individualPayablePrize = Math.trunc(payablePrize / totalWinners);
+
+      const randomNumber = 123456789;
+      const initialContractBalance = new BN(await lotteryContract.getBalance());
+
+      const initialAccount0Balance = new BN(await web3.eth.getBalance(accounts[0]));
+      const initialAccount1Balance = new BN(await web3.eth.getBalance(accounts[1]));
+      const initialAccount2Balance = new BN(await web3.eth.getBalance(accounts[2]));
+      const initialAccount3Balance = new BN(await web3.eth.getBalance(accounts[3]));
+      const initialAccount4Balance = new BN(await web3.eth.getBalance(accounts[4]));
+      const initialAccount5Balance = new BN(await web3.eth.getBalance(accounts[5]));
+      const initialAccount6Balance = new BN(await web3.eth.getBalance(accounts[6]));
+      const initialAccount7Balance = new BN(await web3.eth.getBalance(accounts[7]));
+      const initialAccount8Balance = new BN(await web3.eth.getBalance(accounts[8]));
+      const initialAccount9Balance = new BN(await web3.eth.getBalance(accounts[9]));
+
+      // account[0] is a winner
+      const txInfo0 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[0], value: bettingPrice });
+
+      // account[1] is not a winner
+      const txInfo1 = await lotteryContract.placeBet(9, 8, 7, 6, { from: accounts[1], value: bettingPrice });
+
+      // account[2] is a winner
+      const txInfo2 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[2], value: bettingPrice });
+
+      // account[3] is not a winner
+      const txInfo3 = await lotteryContract.placeBet(0, 0, 1, 4, { from: accounts[3], value: bettingPrice });
+
+      // account[4] is a winner
+      const txInfo4 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[4], value: bettingPrice });
+
+      // account[5] is a winner
+      const txInfo5 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[5], value: bettingPrice });
+
+      // account[6] is a winner
+      const txInfo6 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[6], value: bettingPrice });
+
+      // account[7] is a winner
+      const txInfo7 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[7], value: bettingPrice });
+
+      // account[8] is a winner
+      const txInfo8 = await lotteryContract.placeBet(6, 7, 8, 9, { from: accounts[8], value: bettingPrice });
+
+      // account[9] is not a winner
+      const txInfo9 = await lotteryContract.placeBet(6, 7, 8, 7, { from: accounts[9], value: bettingPrice });
+
+      // Act
+      const txInfoDrawNumbers = await lotteryContract.drawNumbers(randomNumber);
+
+      // Assert
+      const updatedContractBalance = new BN(await lotteryContract.getBalance());
+      const updatedAccount0Balance = new BN(await web3.eth.getBalance(accounts[0]));
+      const updatedAccount1Balance = await web3.eth.getBalance(accounts[1]);
+      const updatedAccount2Balance = new BN(await web3.eth.getBalance(accounts[2]));
+      const updatedAccount3Balance = new BN(await web3.eth.getBalance(accounts[3]));
+      const updatedAccount4Balance = await web3.eth.getBalance(accounts[4]);
+      const updatedAccount5Balance = await web3.eth.getBalance(accounts[5]);
+      const updatedAccount6Balance = await web3.eth.getBalance(accounts[6]);
+      const updatedAccount7Balance = await web3.eth.getBalance(accounts[7]);
+      const updatedAccount8Balance = await web3.eth.getBalance(accounts[8]);
+      const updatedAccount9Balance = await web3.eth.getBalance(accounts[9]);
+
+      // initial balance + profit + the decimal difference as Solidity currently only works with integer part of numbers
+      const expectedContractBalance = initialContractBalance
+        .add(toBN(profit))
+        .add(toBN(payablePrize).mod(toBN(totalWinners)));
+      assert.equal(updatedContractBalance.toString(), expectedContractBalance.toString());
+
+      // account 0 (winner). Note: account 0 is the contract owner who also paid gas to draw the numbers
+      const gasPrice0 = (await web3.eth.getTransaction(txInfo0.tx)).gasPrice;
+      const gasCost0 = toBN(gasPrice0).mul(toBN(txInfo0.receipt.gasUsed));
+      const gasPriceDrawNumbers = (await web3.eth.getTransaction(txInfoDrawNumbers.tx)).gasPrice;
+      const gasCostDrawnNumbers = toBN(gasPriceDrawNumbers).mul(toBN(txInfoDrawNumbers.receipt.gasUsed));
+      const expectedAccount0Balance = initialAccount0Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost0)
+        .sub(gasCostDrawnNumbers)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount0Balance.toString(), expectedAccount0Balance.toString());
+
+      // account 1
+      const gasPrice1 = (await web3.eth.getTransaction(txInfo1.tx)).gasPrice;
+      const gasCost1 = toBN(gasPrice1).mul(toBN(txInfo1.receipt.gasUsed));
+      const expectedAccount1Balance = initialAccount1Balance.sub(toBN(bettingPrice)).sub(gasCost1);
+      assert.equal(updatedAccount1Balance.toString(), expectedAccount1Balance.toString());
+
+      // account 2 (winner)
+      const gasPrice2 = (await web3.eth.getTransaction(txInfo2.tx)).gasPrice;
+      const gasCost2 = toBN(gasPrice2).mul(toBN(txInfo2.receipt.gasUsed));
+      const expectedAccount2Balance = initialAccount2Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost2)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount2Balance.toString(), expectedAccount2Balance.toString());
+
+      // account 3
+      const gasPrice3 = (await web3.eth.getTransaction(txInfo3.tx)).gasPrice;
+      const gasCost3 = toBN(gasPrice3).mul(toBN(txInfo3.receipt.gasUsed));
+      const expectedAccount3Balance = initialAccount3Balance.sub(toBN(bettingPrice)).sub(gasCost3);
+      assert.equal(updatedAccount3Balance.toString(), expectedAccount3Balance.toString());
+
+      // account 4 (winner)
+      const gasPrice4 = (await web3.eth.getTransaction(txInfo4.tx)).gasPrice;
+      const gasCost4 = toBN(gasPrice4).mul(toBN(txInfo4.receipt.gasUsed));
+      const expectedAccount4Balance = initialAccount4Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost4)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount4Balance.toString(), expectedAccount4Balance.toString());
+
+      // account 5 (winner)
+      const gasPrice5 = (await web3.eth.getTransaction(txInfo5.tx)).gasPrice;
+      const gasCost5 = toBN(gasPrice5).mul(toBN(txInfo5.receipt.gasUsed));
+      const expectedAccount5Balance = initialAccount5Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost5)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount5Balance.toString(), expectedAccount5Balance.toString());
+
+      // account 6 (winner)
+      const gasPrice6 = (await web3.eth.getTransaction(txInfo6.tx)).gasPrice;
+      const gasCost6 = toBN(gasPrice6).mul(toBN(txInfo6.receipt.gasUsed));
+      const expectedAccount6Balance = initialAccount6Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost6)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount6Balance.toString(), expectedAccount6Balance.toString());
+
+      // account 7 (winner)
+      const gasPrice7 = (await web3.eth.getTransaction(txInfo7.tx)).gasPrice;
+      const gasCost7 = toBN(gasPrice7).mul(toBN(txInfo7.receipt.gasUsed));
+      const expectedAccount7Balance = initialAccount7Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost7)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount7Balance.toString(), expectedAccount7Balance.toString());
+
+      // account 8 (winner)
+      const gasPrice8 = (await web3.eth.getTransaction(txInfo8.tx)).gasPrice;
+      const gasCost8 = toBN(gasPrice8).mul(toBN(txInfo8.receipt.gasUsed));
+      const expectedAccount8Balance = initialAccount8Balance
+        .sub(toBN(bettingPrice))
+        .sub(gasCost8)
+        .add(toBN(individualPayablePrize));
+      assert.equal(updatedAccount8Balance.toString(), expectedAccount8Balance.toString());
+
+      // account 9
+      const gasPrice9 = (await web3.eth.getTransaction(txInfo9.tx)).gasPrice;
+      const gasCost9 = toBN(gasPrice9).mul(toBN(txInfo9.receipt.gasUsed));
+      const expectedAccount9Balance = initialAccount9Balance.sub(toBN(bettingPrice)).sub(gasCost9);
+      assert.equal(updatedAccount9Balance.toString(), expectedAccount9Balance.toString());
+    });
+  });
 
   describe("endGame", async () => {
     it("game should get closed correctly", async () => {

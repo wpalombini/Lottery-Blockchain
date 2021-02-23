@@ -21,7 +21,7 @@ contract LotteryContract {
 
     GameStateEnum public gameState = GameStateEnum.CLOSED;
     
-    uint256 public bettingPrice = 100;
+    uint256 public bettingPrice = 10000;
     
     address payable admin;
     
@@ -44,7 +44,6 @@ contract LotteryContract {
         uint bettingAmount;
         uint gameId;
         BettingNumbers bettingNumbers;
-        bool winner;
     }
     
     struct BettingNumbers {
@@ -92,6 +91,10 @@ contract LotteryContract {
         require(msg.value == bettingPrice, "Invalid betting price");
         _;
     }
+
+    function getBalance() public view adminRequired returns (uint) {
+        return address(this).balance;
+    }
     
     function startGame() public adminRequired {
         // ensure there are no active games
@@ -129,7 +132,7 @@ contract LotteryContract {
         
         BettingNumbers memory bettingNumbers = BettingNumbers(n1, n2, n3, n4);
         
-        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, bettingNumbers, false);
+        Bet memory bet = Bet(totalBets, msg.sender, msg.value, currentGameId, bettingNumbers);
         
         bets.push(bet);
     }
@@ -182,30 +185,26 @@ contract LotteryContract {
 
     function findWinners() private {
         for (uint i; i < bets.length; i++) {
-            bets[i].winner = bets[i].bettingNumbers.n1 == games[currentGameId].drawnNumbers.n1
+            bool winner = bets[i].bettingNumbers.n1 == games[currentGameId].drawnNumbers.n1
                 && bets[i].bettingNumbers.n2 == games[currentGameId].drawnNumbers.n2
                 && bets[i].bettingNumbers.n3 == games[currentGameId].drawnNumbers.n3
                 && bets[i].bettingNumbers.n4 == games[currentGameId].drawnNumbers.n4;
+
+            if (winner) {
+                winners.push(bets[i].player);
+            }
         }
     }
 
     function payoutWinners() private {
-        for (uint i; i < bets.length; i++) {
-            if (bets[i].winner == true) {
-                winners.push(bets[i].player);
-            }
-        }
-
-        uint comission = 0;
-        
         // If there are winners...
         if (winners.length > 0) { 
-            // ...take comission when the below division is not exact
-            comission = games[currentGameId].totalBetAmount % winners.length * bettingPrice;
+            // ...take 10% profit
+            uint256 profit = games[currentGameId].totalBetAmount * 10 / 100;
 
-            uint payablePrize = games[currentGameId].totalBetAmount - comission;
+            uint256 payablePrize = games[currentGameId].totalBetAmount - profit;
 
-            uint individualPayablePrize = payablePrize / winners.length;
+            uint256 individualPayablePrize = payablePrize / winners.length;
 
             for (uint i; i < winners.length; i++) {
                 winners[i].transfer(individualPayablePrize);

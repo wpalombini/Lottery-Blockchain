@@ -607,4 +607,58 @@ contract("LotteryContract", (accounts) => {
       assert.equal(gameState, CLOSED);
     });
   });
+
+  describe("withdrawBalance", async () => {
+    beforeEach(async () => {
+      await lotteryContract.startGame();
+    });
+
+    it("requires that only the admin can withdraw balance", async () => {});
+
+    it("requires that there is no active game running", async () => {});
+
+    it("requires that the destination address is valid", async () => {});
+
+    it("should transfer balance correctly", async () => {
+      // Arrange
+      const randomNumber = 123456789;
+      const totalPlayers = 5;
+
+      await lotteryContract.placeBet(9, 8, 7, 6, { from: accounts[1], value: bettingPrice });
+      await lotteryContract.placeBet(6, 7, 7, 9, { from: accounts[2], value: bettingPrice });
+      await lotteryContract.placeBet(0, 0, 1, 4, { from: accounts[3], value: bettingPrice });
+      await lotteryContract.placeBet(7, 7, 8, 9, { from: accounts[4], value: bettingPrice });
+      await lotteryContract.placeBet(6, 7, 8, 0, { from: accounts[5], value: bettingPrice });
+
+      const randomRecipient = getRandomAccount();
+      const initialRandomRecipientBalance = new BN(await web3.eth.getBalance(randomRecipient));
+
+      const txInfoDrawNumbers = await lotteryContract.drawNumbers(randomNumber);
+
+      const contractBalance = new BN(await lotteryContract.getBalance());
+
+      // Act
+      const txInfoWithdrawBalance = await lotteryContract.withdrawBalance(randomRecipient);
+
+      let updatedRandomRecipientBalance = new BN(await web3.eth.getBalance(randomRecipient));
+
+      // if account 0 (msg.sender), then bring gas costs back to expected balance
+      if (randomRecipient == accounts[0]) {
+        const gasPriceDrawNumbers = (await web3.eth.getTransaction(txInfoDrawNumbers.tx)).gasPrice;
+        const gasCostDrawnNumbers = toBN(gasPriceDrawNumbers).mul(toBN(txInfoDrawNumbers.receipt.gasUsed));
+        const gasPriceWithdrawBalance = (await web3.eth.getTransaction(txInfoWithdrawBalance.tx)).gasPrice;
+        const gasCostWithdrawBalance = toBN(gasPriceWithdrawBalance).mul(toBN(txInfoWithdrawBalance.receipt.gasUsed));
+        updatedRandomRecipientBalance = updatedRandomRecipientBalance
+          .add(gasCostDrawnNumbers)
+          .add(gasCostWithdrawBalance);
+      }
+
+      // Assert
+      assert.equal(
+        initialRandomRecipientBalance.add(contractBalance).toString(),
+        updatedRandomRecipientBalance.toString()
+      );
+      assert.equal(await lotteryContract.getBalance(), 0);
+    });
+  });
 });

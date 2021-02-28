@@ -73,6 +73,11 @@ contract LotteryContract {
         require(games[currentGameId].id == currentGameId, "cannot find game");
         _;
     }
+
+    modifier noActiveGameRequired() {
+        require(gameState == GameStateEnum.CLOSED, "There is an active game running");
+        _;
+    }
     
     modifier adminRequired() {
         require(msg.sender == admin, "Only admin has access to this resource");
@@ -94,6 +99,12 @@ contract LotteryContract {
 
     function getBalance() public view adminRequired returns (uint) {
         return address(this).balance;
+    }
+
+    function withdrawBalance(address payable _to) payable public adminRequired noActiveGameRequired {
+        require(_to != 0 || _to != 0x0, "Invalid address");
+        
+        _to.transfer(address(this).balance);
     }
     
     function startGame() public adminRequired {

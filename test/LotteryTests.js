@@ -613,16 +613,23 @@ contract("LotteryContract", (accounts) => {
       await lotteryContract.startGame();
     });
 
-    it("requires that only the admin can withdraw balance", async () => {});
+    it("requires that only the admin can withdraw balance", async () => {
+      await truffleAssert.reverts(
+        lotteryContract.withdrawBalance(accounts[7], { from: accounts[1] }),
+        "Only admin has access to this resource"
+      );
+    });
 
-    it("requires that there is no active game running", async () => {});
-
-    it("requires that the destination address is valid", async () => {});
+    it("requires that there is no active game running", async () => {
+      await truffleAssert.reverts(
+        lotteryContract.withdrawBalance(accounts[1], { from: accounts[0] }),
+        "There is an active game running"
+      );
+    });
 
     it("should transfer balance correctly", async () => {
       // Arrange
       const randomNumber = 123456789;
-      const totalPlayers = 5;
 
       await lotteryContract.placeBet(9, 8, 7, 6, { from: accounts[1], value: bettingPrice });
       await lotteryContract.placeBet(6, 7, 7, 9, { from: accounts[2], value: bettingPrice });

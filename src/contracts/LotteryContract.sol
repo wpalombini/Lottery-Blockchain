@@ -102,8 +102,8 @@ contract LotteryContract {
     }
 
     function withdrawBalance(address payable _to) payable public adminRequired noActiveGameRequired {
-        require(_to != 0 || _to != 0x0, "Invalid address");
-        
+        require(_to != address(0) || _to != address(0x0), "The destination address is invalid");
+
         _to.transfer(address(this).balance);
     }
     
